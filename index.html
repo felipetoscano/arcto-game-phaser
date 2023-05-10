@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta charset="UTF-8">
+        <title>Game</title>
+        <script src="phaser.min.js"></script> 
+        <script type="text/javascript"> 
+            const worldWidth = 1280;
+            const worldHeight = 650;
+
+            var game = new Phaser.Game(worldWidth, worldHeight, Phaser.AUTO, '', { preload: preload, create: create, update: update });     
+
+            var platform = new Array(10);
+            var heartsGroup;
+            var backgroundStart; 
+            var buttonEasy;
+            var buttonNormal;
+            var buttonHard;
+            var buttonStart;
+            var difficult = 0;
+
+            var player;
+            var playerWeapon;
+            var playerTimer = 0;
+            var playerLifes;
+            var makePlayerParticle = false;
+
+            var boss;
+            var bossWeapon;
+            var bossTimer = 0;
+            var bossLifes;
+            var makeBossParticle = false;
+            var leftBoss = true;
+            
+            var randomLeft = randomWidth();
+            var randomRight = randomWidth();
+            var randomJumpBoss = randomBoolean();
+            var randomDownBoss = randomBoolean();
+            var timerJumpBoss = 0;
+            var timerDownBoss = 0;
+
+            function preload() { 
+                game.load.bitmapFont('font', 'assets/fonts/bitmapFont.png', 'assets/fonts/bitmapFont.xml');
+                game.load.image('backgroundGame', 'assets/scenery/backgroundGame.jpg');
+                game.load.spritesheet('player', 'assets/player/player.png', 80, 80, 25);
+                game.load.spritesheet('playerWeapon', 'assets/player/playerWeapon.png', 50, 50, 9);
+                game.load.image('playerWeaponParticle', 'assets/player/playerWeaponParticle.png');
+                game.load.image('boss', 'assets/boss/boss.png');
+                game.load.spritesheet('bossWeapon', 'assets/boss/bossWeapon.png', 50, 40, 10);
+                game.load.spritesheet('bossWeaponParticle', 'assets/boss/bossWeaponParticle.png', 16, 16, 4);
+                game.load.image('backgroundStart', 'assets/mainMenu/backgroundStart.jpeg');
+                game.load.image('buttonEasy', 'assets/mainMenu/buttonEasy.jpeg');
+                game.load.image('buttonNormal', 'assets/mainMenu/buttonNormal.jpeg');
+                game.load.image('buttonHard', 'assets/mainMenu/buttonHard.jpeg');
+                game.load.image('buttonStart', 'assets/mainMenu/buttonStart.jpeg');
+                game.load.image('platform1', 'assets/scenery/platform1.jpeg');
+                game.load.image('platform2', 'assets/scenery/platform2.jpeg');
+                game.load.image('platform3', 'assets/scenery/platform3.jpeg');
+                game.load.image('heart', 'assets/scenery/heart.png') 
+                game.load.image('dirtParticle', 'assets/scenery/dirtParticle.png');
+            }    
+                
+            function create() { 
+                game.physics.startSystem(Phaser.Physics.ARCADE);
+                game.world.setBounds(0, 0, worldWidth, worldHeight);
+                game.add.sprite(0, 0, 'backgroundGame');
+                game.paused = true;
+                
+                player = createCharacter(100, worldHeight, 'player');
+                playerWeapon = createWeapon(500, 0, 'playerWeapon');
+                playerWeapon.addBulletAnimation('fire', [0, 1, 2, 3, 4, 5, 6, 7, 8], 10, true);
+                playerWeapon.trackSprite(player, player.offsetX, 0);
+
+                boss = createCharacter(1200, worldHeight, 'boss');
+                bossWeapon = createWeapon(1000, 180, 'bossWeapon');
+                bossWeapon.addBulletAnimation('fire', [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10], 10, true);
+                bossWeapon.trackSprite(boss, boss.offsetX, 0);
+
+                platform[0] = createPlatform(100, 100, 'platform1');
+                platform[1] = createPlatform(500, 100, 'platform3');
+                platform[2] = createPlatform(900, 100, 'platform2');
+                platform[3] = createPlatform(0, 300, 'platform1');
+                platform[4] = createPlatform(350, 300, 'platform3');
+                platform[5] = createPlatform(700, 300, 'platform1');
+                platform[6] = createPlatform(1050, 300, 'platform2');
+                platform[7] = createPlatform(100, 500, 'platform3');
+                platform[8] = createPlatform(500, 500, 'platform2');
+                platform[9] = createPlatform(900, 500, 'platform1');
+                
+                game.add.bitmapText(10, 10, 'font', 'JOGADOR', 20);
+                playerLifes = 5;
+
+                game.add.bitmapText(1075, 10, 'font', 'OPONENTE', 20);
+                bossLifes = 10;
+
+                createHearts();
+
+                backgroundStart = game.add.sprite(0, 0, 'backgroundStart');
+                buttonEasy = game.add.button(100, 390, 'buttonEasy', onClickButtonEasy, this);
+                buttonNormal = game.add.button(500, 390, 'buttonNormal', onClickButtonNormal, this);
+                buttonHard = game.add.button(900, 390, 'buttonHard', onClickButtonHard, this);
+            } 
+
+            function update () { 
+                collisionEvent();
+                keyDownEvent();
+                bossMechanic();
+                jumpParticles(); 
+                checkCursor();
+            } 
+
+            function createHearts(){
+                heartsGroup = game.add.group();
+                var x = 185;
+            
+                for(i = 0; i < playerLifes; i++){
+                    heartsGroup.create(x, 7.5, 'heart', 'lifes');
+                    x += 30;
+                }
+
+                x = 1035;
+                for(i = 0; i < bossLifes; i++){
+                    heartsGroup.create(x, 7.5, 'heart', 'lifes');
+                    x -= 30;
+                }
+            }
+
+            function updateHearts(isPlayer){
+                isPlayer ? playerLifes-- : bossLifes--;
+
+                if(playerLifes == 0)
+                    gameOver("PERDEU!");
+                else if(bossLifes == 0)
+                    gameOver("VENCEU!");
+
+                heartsGroup.destroy();
+                createHearts();
+            }
+
+            function createCharacter(x, y, imageID){
+                var createCharacter = game.add.sprite(x, y, imageID);
+                    game.physics.enable(createCharacter, Phaser.Physics.ARCADE);
+                    createCharacter.anchor.setTo(0.5);
+                    createCharacter.body.bounce.y = 0.2;
+                    createCharacter.body.gravity.y = 2000;
+                    createCharacter.body.collideWorldBounds = true;
+                    createCharacter.animations.add('shoot');
+			    return createCharacter;
+            }
+
+            function createWeapon(fireRate, fireAngle, imageID){
+                var createWeapon = game.add.weapon(20, imageID);
+                    createWeapon.bulletKillType = Phaser.Weapon.KILL_WORLD_BOUNDS;
+                    createWeapon.fireRate = fireRate;
+                    createWeapon.fireAngle = fireAngle;
+                    createWeapon.bulletSpeed = 400;
+                return createWeapon;
+            }
+
+            function createPlatform(x, y, imageID){
+                var createPlatform = game.add.sprite(x, y, imageID);
+                    game.physics.enable(createPlatform, Phaser.Physics.ARCADE);
+                    createPlatform.body.checkCollision.down = false;
+                    createPlatform.body.immovable = true;
+                return createPlatform;
+            }
+
+            function createParticle(x, y, imageID, arrayAnimation){
+                var createParticle = game.add.emitter(0, 0, 5);
+                    createParticle.makeParticles(imageID, arrayAnimation);
+                    createParticle.x = x; 
+                    createParticle.y = y;
+                    createParticle.start(true, 500, null, 3);
+                return createParticle;
+            }
+
+            function jumpParticles(){
+                var floorPlayer = player.bottom == worldHeight;
+                var floorBoss = boss.bottom == worldHeight;  
+                
+                for(var i = 0; i < platform.length; i+=3){
+                    if(player.bottom == platform[i].y){
+                        floorPlayer = true;
+                        break;
+                    }
+                }
+
+                for(var i = 0; i < platform.length; i+=3){
+                    if(boss.bottom == platform[i].y){
+                        floorBoss = true;
+                        break;
+                    }
+                }    
+                
+                if(floorPlayer && makePlayerParticle){
+                    createParticle(player.x, player.bottom, 'dirtParticle');
+                    makePlayerParticle = false;
+                }
+                else if(!floorPlayer)
+                    makePlayerParticle = true;
+
+                if(floorBoss && makeBossParticle){
+                    createParticle(boss.x, boss.bottom, 'dirtParticle');
+                    makeBossParticle = false;
+                }
+                else if(!floorBoss)
+                    makeBossParticle = true;
+            }
+
+            function collisionEvent(){
+                var overlapBoss = game.physics.arcade.overlap(playerWeapon.bullets, boss, destroyBullet);
+                var overlapPlayer = game.physics.arcade.overlap(bossWeapon.bullets, player, destroyBullet);
+
+                for (var i = 0; i < platform.length; i++){
+                    game.physics.arcade.collide(player, platform[i]);
+                    game.physics.arcade.collide(boss, platform[i]);
+                }                
+
+                if(overlapPlayer){
+                    var array = Array.apply(null, {length: 4}).map(Number.call, Number);
+                    createParticle(player.x, player.y, 'bossWeaponParticle', array);
+                    updateHearts(true);
+                }
+                    
+                if(overlapBoss){
+                    createParticle(boss.x, boss.y, 'playerWeaponParticle');
+                    updateHearts(false);
+                }                    
+            }
+
+            function keyDownEvent(){
+                var keyUpDown = game.input.keyboard.isDown(Phaser.Keyboard.UP);
+                var keyDownDown = game.input.keyboard.isDown(Phaser.Keyboard.DOWN);
+                var keyRightDown = game.input.keyboard.isDown(Phaser.Keyboard.RIGHT);
+                var keyLeftDown = game.input.keyboard.isDown(Phaser.Keyboard.LEFT);
+                var keySpaceDown = game.input.keyboard.isDown(Phaser.Keyboard.SPACEBAR);
+                
+                if(keySpaceDown){
+                    player.play('shoot', 100, false);
+                    playerWeapon.fire();
+                }
+                else if(keyRightDown)
+                    player.x += 5;
+                else if(keyLeftDown)
+                    player.x -= 5;
+                else if(keyDownDown)
+                    player.y += 5;   
+                else if(keyUpDown)
+                    jumpPlayer();           
+            }
+
+             function bossMechanic(){
+                if(leftBoss){
+                    if(boss.x < randomLeft){
+                        leftBoss = false;
+                        randomLeft = randomWidth();
+                    }
+                    else
+                        boss.x -= 5 * difficult;
+                }
+                else{
+                    if(boss.x > randomRight){
+                        leftBoss = true;
+                        randomRight = randomWidth();
+                    }   
+                    else
+                        boss.x += 5 * difficult;
+                }
+
+                if(randomJumpBoss){
+                    jumpBoss();
+                    randomJumpBoss = false;
+                }
+                else if(game.time.now > timerJumpBoss){
+                    timerJumpBoss = (game.time.now + 1000) / difficult;
+                    randomJumpBoss = randomBoolean();
+                }
+
+                if(randomDownBoss && boss.bottom == platform[3].y){
+                    boss.y += 5;
+                    randomDownBoss = false;
+                }
+                else if(game.time.now > timerDownBoss){
+                    timerDownBoss = (game.time.now + 2000) / difficult;
+                    randomDownBoss = randomBoolean();
+                }
+
+                bossWeapon.fire();
+            }
+
+            function jumpBoss(){
+                if(game.time.now > bossTimer){
+                    bossTimer = game.time.now + 1000;
+                    boss.body.velocity.y -= 1000;
+                }
+            }
+
+            function jumpPlayer(){
+                if(game.time.now > playerTimer){
+                    playerTimer = game.time.now + 1000;
+                    player.body.velocity.y -= 1000;
+                }
+            }
+
+            function onClickButtonEasy(){
+                bossWeapon.fireRate = 1000;
+                difficult = 1;
+                onClickDifficult();
+            }
+
+            function onClickButtonNormal(){
+                bossWeapon.fireRate = 500;
+                difficult = 2;
+                onClickDifficult();
+            }
+
+            function onClickButtonHard(){
+                bossWeapon.fireRate = 300;
+                difficult = 3;
+                onClickDifficult();
+            }
+
+            function onClickDifficult(){
+                game.paused = false;
+                backgroundStart.destroy();
+                buttonEasy.destroy();
+                buttonNormal.destroy();
+                buttonHard.destroy();              
+            }
+
+            function checkCursor(){
+                if(!game.isPaused)
+                    game.canvas.style.cursor = 'none';  
+                else
+                    game.canvas.style.cursor = 'default';  
+            }
+
+            function gameOver(text){
+                game.paused = true;
+                game.add.bitmapText(375, 200, 'font', text, 60);
+                buttonStart = game.add.button(550, 380, 'buttonStart', restartGame, this);
+            }
+
+            function restartGame(){
+                game.paused = false;
+                game.state.restart();
+            }
+
+            function destroyBullet(character, bullet){
+                bullet.kill();
+            }     
+
+            function randomBoolean(){
+                return Math.random() > 0.5;
+            }
+
+            function randomWidth(){
+                return Math.random() * ((worldWidth - 100) - 100) + 100;
+            }
+        </script>
+    </head>
+<body>
+</body>
+</html>
